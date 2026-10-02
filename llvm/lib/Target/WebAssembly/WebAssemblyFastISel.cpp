@@ -1585,6 +1585,9 @@ static unsigned matchFoldableAnd(MachineInstr *MI, const LoadInst *LI,
 
 bool WebAssemblyFastISel::tryToFoldLoadIntoMI(MachineInstr *MI, unsigned OpNo,
                                               const LoadInst *LI) {
+  if (!WebAssembly::isDefaultAddressSpace(LI->getPointerAddressSpace()))
+    return false;
+
   bool A64 = Subtarget->hasAddr64();
   MachineRegisterInfo &MRI = FuncInfo.MF->getRegInfo();
   Register ResultReg;

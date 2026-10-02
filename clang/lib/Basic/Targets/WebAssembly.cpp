@@ -87,6 +87,13 @@ void WebAssemblyTargetInfo::fillValidCPUList(
 void WebAssemblyTargetInfo::getTargetDefines(const LangOptions &Opts,
                                              MacroBuilder &Builder) const {
   defineCPUMacros(Builder, "wasm", /*Tuning=*/false);
+  if (Opts.ModLoader) {
+    Builder.defineMacro("__MODLOADER__");
+    Builder.defineMacro("__MODLOADER_GUEST_POINTER_WIDTH__",
+                        getTriple().getEnvironmentName() == "guest64" ? "64"
+                                                                      : "32");
+  }
+
   if (HasAtomics)
     Builder.defineMacro("__wasm_atomics__");
   if (HasBulkMemory)

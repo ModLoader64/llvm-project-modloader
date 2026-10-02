@@ -446,6 +446,7 @@ def OpenCL : LangOpt<"OpenCL">;
 def ObjC : LangOpt<"ObjC">;
 def BlocksSupported : LangOpt<"Blocks">;
 def ObjCAutoRefCount : LangOpt<"ObjCAutoRefCount">;
+def ModLoader : LangOpt<"ModLoader">;
 def ObjCNonFragileRuntime
     : LangOpt<"", "LangOpts.ObjCRuntime.allowsClassStubs()">;
 
@@ -3736,6 +3737,34 @@ def MinVectorWidth : InheritableAttr {
   let Args = [UnsignedArgument<"VectorWidth">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [MinVectorWidthDocs];
+}
+
+def ModLoaderStructSize : InheritableAttr {
+  let Spellings = [CXX11<"", "struct_size", 202609>];
+  let Args = [UnsignedArgument<"Size">];
+  let Subjects = SubjectList<[Record], ErrorDiag>;
+  let LangOpts = [ModLoader];
+  let Documentation = [Undocumented];
+}
+
+def ModLoaderGuestABI : InheritableAttr {
+  let Spellings = [];
+  let Subjects = SubjectList<[Record]>;
+  let Documentation = [InternalOnly];
+}
+
+def ModLoaderHostSpace : TypeAttr {
+  let Spellings = [Clang<"modloader_host_space">];
+  let LangOpts = [ModLoader];
+  let Documentation = [Undocumented];
+}
+
+def ModLoaderFieldOffset : InheritableAttr {
+  let Spellings = [CXX11<"", "field_offset", 202609>];
+  let Args = [UnsignedArgument<"Offset">];
+  let Subjects = SubjectList<[Field], ErrorDiag>;
+  let LangOpts = [ModLoader];
+  let Documentation = [Undocumented];
 }
 
 def TransparentUnion : InheritableAttr {

@@ -163,6 +163,11 @@ bool Parser::isCXXSimpleDeclaration(bool AllowForRangeDecl) {
 }
 
 Parser::TPResult Parser::TryConsumeDeclarationSpecifier() {
+  if (isModLoaderSpaceQualifier()) {
+    ConsumeModLoaderQualifier();
+    return TPResult::Ambiguous;
+  }
+
   switch (Tok.getKind()) {
   case tok::kw__Atomic:
     if (NextToken().isNot(tok::l_paren)) {
@@ -799,8 +804,9 @@ Parser::TPResult Parser::TryParsePtrOperatorSeq() {
       while (Tok.isOneOf(tok::kw_const, tok::kw_volatile, tok::kw_restrict,
                          tok::kw__Nonnull, tok::kw__Nullable,
                          tok::kw__Nullable_result, tok::kw__Null_unspecified,
-                         tok::kw__Atomic))
-        ConsumeToken();
+                         tok::kw__Atomic) ||
+             isModLoaderSpaceQualifier())
+        ConsumeModLoaderQualifier();
     } else {
       return TPResult::True;
     }
@@ -1053,6 +1059,9 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
   };
   switch (Tok.getKind()) {
   case tok::identifier: {
+    if (isModLoaderSpaceQualifier())
+      return TPResult::True;
+
     if (GetLookAheadToken(1).is(tok::ellipsis) &&
         GetLookAheadToken(2).is(tok::l_square)) {
 

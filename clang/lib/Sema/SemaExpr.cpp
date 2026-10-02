@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CheckExprLifetime.h"
+#include "SemaModLoader.h"
 #include "TreeTransform.h"
 #include "UsedDeclVisitor.h"
 #include "clang/AST/ASTConsumer.h"
@@ -7191,6 +7192,12 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
       FuncT = PT->getPointeeType()->getAs<FunctionType>();
       if (!FuncT)
         return ExprError(Diag(LParenLoc, diag::err_typecheck_call_not_function)
+                         << Fn->getType() << Fn->getSourceRange());
+
+      if (getLangOpts().ModLoader &&
+          modloader::isGuestAddressSpace(
+              PT->getPointeeType().getAddressSpace()))
+        return ExprError(Diag(LParenLoc, diag::err_modloader_guest_call)
                          << Fn->getType() << Fn->getSourceRange());
     } else if (const BlockPointerType *BPT =
                    Fn->getType()->getAs<BlockPointerType>()) {
@@ -16055,6 +16062,13 @@ ExprResult Sema::BuildBinOp(Scope *S, SourceLocation OpLoc,
                             Expr *RHSExpr, bool ForFoldExpression) {
   if (!LHSExpr || !RHSExpr)
     return ExprError();
+
+  if (getLangOpts().ModLoader && Opc == BO_Assign) {
+    ExprResult Copy =
+        modloader::buildObjectAssignment(*this, OpLoc, LHSExpr, RHSExpr);
+    if (!Copy.isUnset())
+      return Copy;
+  }
 
   // We want to end up calling one of SemaPseudoObject::checkAssignment
   // (if the LHS is a pseudo-object), BuildOverloadedBinOp (if

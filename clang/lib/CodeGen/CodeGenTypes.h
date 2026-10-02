@@ -96,9 +96,7 @@ public:
   CodeGenTypes(CodeGenModule &cgm);
   ~CodeGenTypes();
 
-  const llvm::DataLayout &getDataLayout() const {
-    return TheModule.getDataLayout();
-  }
+  const llvm::DataLayout &getDataLayout() const;
   CodeGenModule &getCGM() const { return CGM; }
   ASTContext &getContext() const { return Context; }
   const TargetInfo &getTarget() const { return Target; }

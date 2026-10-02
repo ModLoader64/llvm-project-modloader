@@ -3775,6 +3775,12 @@ void Parser::ParseDeclarationSpecifiers(
     case tok::kw_decltype:
     case tok::identifier:
     ParseIdentifier: {
+      if (isModLoaderSpaceQualifier()) {
+        ParseModLoaderSpaceQualifier(DS.getAttributes());
+        DS.SetRangeEnd(PrevTokLocation);
+        continue;
+      }
+
       // This identifier can only be a typedef name if we haven't already seen
       // a type-specifier.  Without this check we misparse:
       //  typedef int X; struct Y { short X; };  as 'short int'.
@@ -5647,6 +5653,8 @@ bool Parser::isTypeSpecifierQualifier(const Token &Tok) {
   default: return false;
 
   case tok::identifier:   // foo::bar
+    if (isModLoaderSpaceQualifier())
+      return true;
     if (TryAltiVecVectorToken())
       return true;
     [[fallthrough]];
@@ -5838,6 +5846,8 @@ bool Parser::isDeclarationSpecifier(
     // Unfortunate hack to support "Class.factoryMethod" notation.
     if (getLangOpts().ObjC && NextToken().is(tok::period))
       return false;
+    if (isModLoaderSpaceQualifier())
+      return true;
     if (TryAltiVecVectorToken())
       return true;
     [[fallthrough]];
@@ -6375,6 +6385,14 @@ void Parser::ParseTypeQualifierListOpt(
                                 tok::kw___kindof);
       (void)ConsumeToken();
       continue;
+
+    case tok::identifier:
+      if (isModLoaderSpaceQualifier()) {
+        ParseModLoaderSpaceQualifier(DS.getAttributes());
+        EndLoc = PrevTokLocation;
+        continue;
+      }
+      goto DoneWithTypeQuals;
 
     case tok::kw___attribute:
       if (AttrReqs & AR_GNUAttributesParsedAndRejected)

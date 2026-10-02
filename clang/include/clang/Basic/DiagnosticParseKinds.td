@@ -1920,4 +1920,8 @@ def err_hlsl_number_literal_underflow : Error<
   "float literal has a magnitude that is too small to be represented as a float type">;
 def err_hlsl_rootsig_non_zero_flag : Error<"flag value is neither a literal 0 nor a named value">;
 
+def err_modloader_unknown_space : Error<
+  "unknown guest space %0; declare it with '#pragma modloader space'">;
+def err_modloader_pragma : Error<"invalid '#pragma modloader': %0">;
+
 } // end of Parser diagnostics

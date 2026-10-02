@@ -102,6 +102,7 @@ add_clang_library(clangAST
   Mangle.cpp
   MicrosoftCXXABI.cpp
   MicrosoftMangle.cpp
+  ModLoaderSpaces.cpp
   NestedNameSpecifier.cpp
   NSAPI.cpp
   ODRDiagsEmitter.cpp

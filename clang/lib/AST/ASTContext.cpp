@@ -36,6 +36,7 @@
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/Mangle.h"
 #include "clang/AST/MangleNumberingContext.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/RawCommentList.h"
@@ -954,6 +955,8 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
 }
 
 void ASTContext::cleanup() {
+  ModLoaderSpaces.reset();
+
   // Release the DenseMaps associated with DeclContext objects.
   // FIXME: Is this the ideal solution?
   ReleaseDeclContextMaps();

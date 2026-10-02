@@ -31,6 +31,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExternalASTSource.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/ODRDiagsEmitter.h"
 #include "clang/AST/OpenACCClause.h"
@@ -4463,6 +4464,56 @@ llvm::Error ASTReader::ReadASTBlock(ModuleFile &F,
       for (unsigned I = 0, N = Record.size(); I != N; /*in loop*/)
         DeclsWithEffectsToVerify.push_back(ReadDeclID(F, Record, I));
       break;
+
+    case MODLOADER_SPACE: {
+      if (Record.size() < 7 || Record[0] != Record.size() - 7)
+        return llvm::createStringError(std::errc::illegal_byte_sequence,
+                                       "invalid ModLoader space record");
+
+      unsigned Index = 0;
+      modloader::Space Space;
+      Space.Name = ReadString(Record, Index);
+      Space.Id = Record[Index++];
+      Space.Kind = static_cast<modloader::Codec>(Record[Index++]);
+      Space.Width = Record[Index++];
+      Space.Mask = Record[Index++];
+      Space.TrackDirty = Record[Index++] != 0;
+      Space.ABI = static_cast<modloader::GuestABI>(Record[Index++]);
+      std::string Message = getContext().getModLoaderSpaces().add(Space);
+      if (!Message.empty())
+        return llvm::createStringError(std::errc::illegal_byte_sequence,
+                                       "ModLoader: %s", Message.c_str());
+
+      break;
+    }
+
+    case MODLOADER_REGION: {
+      if (Record.size() != 4)
+        return llvm::createStringError(std::errc::illegal_byte_sequence,
+                                       "invalid ModLoader region record");
+
+      modloader::Region Region = {unsigned(Record[0]), unsigned(Record[1]),
+                                  Record[2], Record[3]};
+      std::string Message = getContext().getModLoaderSpaces().addRegion(Region);
+      if (!Message.empty())
+        return llvm::createStringError(std::errc::illegal_byte_sequence,
+                                       "ModLoader: %s", Message.c_str());
+
+      break;
+    }
+
+    case MODLOADER_PREAMBLE_DEFAULTS: {
+      if (Record.size() != 3)
+        return llvm::createStringError(std::errc::illegal_byte_sequence,
+                                       "invalid ModLoader defaults record");
+
+      modloader::Defaults Defaults = {
+          Record[0] != 0, unsigned(Record[1]),
+          static_cast<modloader::GuestABI>(Record[2])};
+      getContext().getModLoaderSpaces().useSpace(
+          getSourceManager().getMainFileID().getHashValue(), Defaults);
+      break;
+    }
 
     case OPENCL_EXTENSIONS:
       for (unsigned I = 0, E = Record.size(); I != E; ) {

@@ -60,6 +60,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/ModLoaderAddressSpaces.h"
 #include "llvm/TargetParser/SubtargetFeature.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/HipStdPar/HipStdPar.h"
@@ -1354,7 +1355,8 @@ void EmitAssemblyHelper::emitAssembly(BackendAction Action,
 
   if (RequiresCodeGen && !TM)
     return;
-  if (TM)
+  if (TM && !(TheModule->getTargetTriple().isWasm() &&
+              TheModule->getNamedMetadata("modloader.spaces")))
     TheModule->setDataLayout(TM->createDataLayout());
 
   // Before executing passes, print the final values of the LLVM options.
@@ -1544,6 +1546,10 @@ void clang::emitBackendOutput(CompilerInstance &CI, CodeGenOptions &CGOpts,
   // DataLayout.
   if (AsmHelper.TM) {
     std::string DLDesc = M->getDataLayout().getStringRepresentation();
+    if (M->getTargetTriple().isWasm() &&
+        M->getNamedMetadata("modloader.spaces"))
+      DLDesc = llvm::ModLoader::withoutGuestPointerLayouts(DLDesc);
+
     if (DLDesc != TDesc) {
       Diags.Report(diag::err_data_layout_mismatch) << DLDesc << TDesc;
     }

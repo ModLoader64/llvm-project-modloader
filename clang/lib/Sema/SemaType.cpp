@@ -22,6 +22,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/LocInfoType.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeLocVisitor.h"
@@ -911,6 +912,9 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   if (DeclLoc.isInvalid())
     DeclLoc = DS.getBeginLoc();
 
+  bool GuestTypes =
+      S.getLangOpts().ModLoader && modloader::inGuestABIRegion(S.Context);
+
   ASTContext &Context = S.Context;
 
   QualType Result;
@@ -1036,7 +1040,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
         Result = Context.ShortTy;
         break;
       case TypeSpecifierWidth::Long:
-        Result = Context.LongTy;
+        Result = GuestTypes ? Context.IntTy : Context.LongTy;
         break;
       case TypeSpecifierWidth::LongLong:
         Result = Context.LongLongTy;
@@ -1064,7 +1068,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
         Result = Context.UnsignedShortTy;
         break;
       case TypeSpecifierWidth::Long:
-        Result = Context.UnsignedLongTy;
+        Result = GuestTypes ? Context.UnsignedIntTy : Context.UnsignedLongTy;
         break;
       case TypeSpecifierWidth::LongLong:
         Result = Context.UnsignedLongLongTy;
@@ -1174,7 +1178,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     break;
   case DeclSpec::TST_float:   Result = Context.FloatTy; break;
   case DeclSpec::TST_double:
-    if (DS.getTypeSpecWidth() == TypeSpecifierWidth::Long)
+    if (DS.getTypeSpecWidth() == TypeSpecifierWidth::Long && !GuestTypes)
       Result = Context.LongDoubleTy;
     else
       Result = Context.DoubleTy;
@@ -4769,6 +4773,9 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
           D.setInvalidType(true);
         }
       }
+
+      if (LangOpts.ModLoader)
+        T = modloader::withDefaultSpace(Context, T);
 
       T = S.BuildPointerType(T, DeclType.Loc, Name);
       if (DeclType.Ptr.TypeQuals)
@@ -9191,6 +9198,15 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
       HandleOverflowBehaviorAttr(type, attr, state);
       attr.setUsedAsTypeAttr();
       break;
+
+    case ParsedAttr::AT_ModLoaderHostSpace: {
+      // Preserve explicit host selection under use_space
+      ASTContext &Ctx = state.getSema().Context;
+      type = state.getAttributedType(
+          createSimpleAttr<ModLoaderHostSpaceAttr>(Ctx, attr), type, type);
+      attr.setUsedAsTypeAttr();
+      break;
+    }
 
     case ParsedAttr::AT_NoDeref: {
       // FIXME: `noderef` currently doesn't work correctly in [[]] syntax.

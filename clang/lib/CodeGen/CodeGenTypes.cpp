@@ -32,6 +32,10 @@
 using namespace clang;
 using namespace CodeGen;
 
+const llvm::DataLayout &CodeGenTypes::getDataLayout() const {
+  return CGM.getDataLayout();
+}
+
 CodeGenTypes::CodeGenTypes(CodeGenModule &cgm)
     : CGM(cgm), Context(cgm.getContext()), TheModule(cgm.getModule()),
       Target(cgm.getTarget()) {

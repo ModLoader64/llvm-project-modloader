@@ -357,6 +357,7 @@ public:
 private:
   ASTContext &Context;
   const LangOptions &LangOpts;
+  mutable unsigned ModLoaderLayoutSpaceCount = 0;
   IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS; // Only used for debug info.
   const HeaderSearchOptions &HeaderSearchOpts; // Only used for debug info.
   const PreprocessorOptions &PreprocessorOpts; // Only used for debug info.
@@ -653,6 +654,8 @@ private:
   void createCUDARuntime();
   void createHLSLRuntime();
 
+  void updateModLoaderDataLayout() const;
+
   bool shouldEmitFunction(GlobalDecl GD);
   // Whether a global variable should be emitted by CUDA/HIP host/device
   // related attributes.
@@ -908,6 +911,9 @@ public:
   llvm::Module &getModule() const { return TheModule; }
   DiagnosticsEngine &getDiags() const { return Diags; }
   const llvm::DataLayout &getDataLayout() const {
+    if (LangOpts.ModLoader)
+      updateModLoaderDataLayout();
+
     return TheModule.getDataLayout();
   }
   const TargetInfo &getTarget() const { return Target; }

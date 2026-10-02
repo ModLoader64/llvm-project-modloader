@@ -13,6 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "SemaModLoader.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTStructuralEquivalence.h"
 #include "clang/AST/CXXInheritance.h"
@@ -2560,7 +2561,18 @@ static TryCastResult TryReinterpretCast(Sema &Self, ExprResult &SrcExpr,
   if (IsAddressSpaceConversion(SrcType, DestType)) {
     Kind = CK_AddressSpaceConversion;
     assert(SrcType->isPointerType() && DestType->isPointerType());
-    if (!CStyle &&
+    bool GuestSrc = Self.getLangOpts().ModLoader &&
+                    modloader::isGuestAddressSpace(
+                        SrcType->getPointeeType().getAddressSpace());
+    bool GuestDest = Self.getLangOpts().ModLoader &&
+                     modloader::isGuestAddressSpace(
+                         DestType->getPointeeType().getAddressSpace());
+    if (GuestSrc != GuestDest) {
+      msg = diag::err_modloader_host_guest_cast;
+      return TC_Failed;
+    }
+
+    if (!CStyle && !GuestSrc &&
         !DestType->getPointeeType().getQualifiers().isAddressSpaceSupersetOf(
             SrcType->getPointeeType().getQualifiers(), Self.getASTContext())) {
       SuccessResult = TC_Failed;
@@ -2650,6 +2662,15 @@ static TryCastResult TryReinterpretCast(Sema &Self, ExprResult &SrcExpr,
 static TryCastResult TryAddressSpaceCast(Sema &Self, ExprResult &SrcExpr,
                                          QualType DestType, bool CStyle,
                                          unsigned &msg, CastKind &Kind) {
+  if (Self.getLangOpts().ModLoader) {
+    std::optional<bool> Valid = modloader::checkSpaceCast(
+        Self, SrcExpr.get()->getType(), DestType, CStyle, msg, Kind);
+    if (!Valid)
+      return TC_NotApplicable;
+
+    return *Valid ? TC_Success : TC_Failed;
+  }
+
   if (!Self.getLangOpts().OpenCL && !Self.getLangOpts().SYCLIsDevice)
     // FIXME: As compiler doesn't have any information about overlapping addr
     // spaces at the moment we have to be permissive here.

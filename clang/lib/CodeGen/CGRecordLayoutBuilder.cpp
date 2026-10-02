@@ -251,7 +251,7 @@ void CGRecordLowering::setBitFieldInfo(
   // a bitfield as a single large integer load, we can imagine the bits
   // counting from the most-significant-bit instead of the
   // least-significant-bit.
-  if (DataLayout.isBigEndian())
+  if (DataLayout.isBigEndian() || D->hasAttr<ModLoaderGuestABIAttr>())
     Info.Offset = Info.StorageSize - (Info.Offset + Info.Size);
 
   Info.VolatileStorageSize = 0;
@@ -1184,7 +1184,7 @@ CodeGenTypes::ComputeRecordLayout(const RecordDecl *D, llvm::StructType *Ty) {
       // is in-bounds. However, on BE systems, the offset may be non-zero, but
       // the size + offset should match the storage size in that case as it
       // "starts" at the back.
-      if (getDataLayout().isBigEndian())
+      if (getDataLayout().isBigEndian() || D->hasAttr<ModLoaderGuestABIAttr>())
         assert(static_cast<unsigned>(Info.Offset + Info.Size) ==
                Info.StorageSize &&
                "Big endian union bitfield does not end at the back");

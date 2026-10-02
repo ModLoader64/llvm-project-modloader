@@ -96,6 +96,7 @@ ENUM_LANGOPT(AltivecSrcCompat, AltivecSrcCompatKind, 2,
 LANGOPT(ConvergentFunctions, 1, 1, NotCompatible, "Assume convergent functions")
 LANGOPT(AltiVec           , 1, 0, NotCompatible, "AltiVec-style vector initializers")
 LANGOPT(ZVector           , 1, 0, NotCompatible, "System z vector extensions")
+LANGOPT(ModLoader         , 1, 0, NotCompatible, "ModLoader guest memory extensions")
 LANGOPT(Exceptions        , 1, 0, NotCompatible, "exception handling")
 LANGOPT(ObjCExceptions    , 1, 0, NotCompatible, "Objective-C exceptions")
 LANGOPT(CXXExceptions     , 1, 0, NotCompatible, "C++ exceptions")

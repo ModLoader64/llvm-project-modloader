@@ -21,6 +21,7 @@
 
 #include "WebAssemblyTargetMachine.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
+#include "llvm/TargetParser/ModLoaderAddressSpaces.h"
 
 namespace llvm {
 
@@ -46,6 +47,10 @@ public:
   // TODO: Implement more Scalar TTI for WebAssembly
 
   TTI::PopcntSupportKind getPopcntSupport(unsigned TyWidth) const override;
+
+  unsigned getFlatAddressSpace() const override {
+    return ModLoader::getGuestAddressSpace(0, 32);
+  }
 
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,

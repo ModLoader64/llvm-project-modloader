@@ -29,6 +29,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/LambdaCapture.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/OpenACCClause.h"
 #include "clang/AST/OpenMPClause.h"
@@ -940,6 +941,9 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(HEADER_SEARCH_TABLE);
   RECORD(FP_PRAGMA_OPTIONS);
   RECORD(OPENCL_EXTENSIONS);
+  RECORD(MODLOADER_SPACE);
+  RECORD(MODLOADER_REGION);
+  RECORD(MODLOADER_PREAMBLE_DEFAULTS);
   RECORD(OPENCL_EXTENSION_TYPES);
   RECORD(OPENCL_EXTENSION_DECLS);
   RECORD(DELEGATING_CTORS);
@@ -6264,6 +6268,31 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema *SemaPtr, StringRef isysroot,
     WriteOpenCLExtensions(*SemaPtr);
     WriteCUDAPragmas(*SemaPtr);
     WriteRISCVIntrinsicPragmas(*SemaPtr);
+
+    if (SemaPtr->Context.getLangOpts().ModLoader) {
+      const auto &Table = SemaPtr->Context.getModLoaderSpaces();
+      for (const auto &Space : Table.spaces()) {
+        RecordData Record;
+        AddString(Space.Name, Record);
+        Record.append({Space.Id, static_cast<unsigned>(Space.Kind), Space.Width,
+                       Space.Mask, Space.TrackDirty,
+                       static_cast<unsigned>(Space.ABI)});
+        Stream.EmitRecord(MODLOADER_SPACE, Record);
+      }
+
+      for (const auto &Region : Table.regions()) {
+        RecordData Record = {Region.FlatId, Region.TargetId, Region.From,
+                             Region.To};
+        Stream.EmitRecord(MODLOADER_REGION, Record);
+      }
+
+      if (PP->isRecordingPreamble()) {
+        const auto Defaults = Table.getDefaults();
+        RecordData Record = {Defaults.Guest, Defaults.SpaceId,
+                             static_cast<unsigned>(Defaults.ABI)};
+        Stream.EmitRecord(MODLOADER_PREAMBLE_DEFAULTS, Record);
+      }
+    }
   }
 
   // If we're emitting a module, write out the submodule information.

@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "SemaModLoader.h"
 #include "clang/AST/APValue.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
@@ -8061,6 +8062,10 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
     break;
   case ParsedAttr::AT_MinVectorWidth:
     handleMinVectorWidthAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_ModLoaderStructSize:
+  case ParsedAttr::AT_ModLoaderFieldOffset:
+    modloader::handleLayoutAttr(S, D, AL);
     break;
   case ParsedAttr::AT_Unavailable:
     handleAttrWithMessage<UnavailableAttr>(S, D, AL);

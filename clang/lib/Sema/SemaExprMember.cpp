@@ -9,6 +9,7 @@
 //  This file implements semantic analysis member access expressions.
 //
 //===----------------------------------------------------------------------===//
+#include "SemaModLoader.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
@@ -1803,6 +1804,11 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
                               SourceLocation OpLoc, const CXXScopeSpec &SS,
                               FieldDecl *Field, DeclAccessPair FoundDecl,
                               const DeclarationNameInfo &MemberNameInfo) {
+  if (getLangOpts().ModLoader &&
+      !modloader::checkGuestMember(*this, BaseExpr, IsArrow, Field,
+                                   MemberNameInfo.getLoc()))
+    return ExprError();
+
   // x.a is an l-value if 'a' has a reference type. Otherwise:
   // x.a is an l-value/x-value/pr-value if the base is (and note
   //   that *x is always an l-value), except that if the base isn't

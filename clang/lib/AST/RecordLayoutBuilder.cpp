@@ -14,6 +14,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Basic/TargetInfo.h"
@@ -2051,6 +2052,10 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
   FieldOffset = FieldOffset.alignTo(AlignTo);
   UnpackedFieldOffset = UnpackedFieldOffset.alignTo(UnpackedFieldAlign);
 
+  if (std::optional<CharUnits> Offset =
+          modloader::getFieldOffset(Context, D, getDataSize()))
+    FieldOffset = UnpackedFieldOffset = *Offset;
+
   if (UseExternalLayout) {
     FieldOffset = Context.toCharUnitsFromBits(
         updateExternalFieldOffset(D, Context.toBits(FieldOffset)));
@@ -2062,7 +2067,8 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
       assert(Allowed && "Externally-placed field cannot be placed here");
     }
   } else {
-    if (!IsUnion && EmptySubobjects) {
+    if (!IsUnion && EmptySubobjects &&
+        !D->hasAttr<ModLoaderFieldOffsetAttr>()) {
       // Check if we can place the field at this offset.
       while (!EmptySubobjects->CanPlaceFieldAtOffset(D, FieldOffset)) {
         // We couldn't place the field at the offset. Try again at a new offset.
@@ -2177,6 +2183,9 @@ void ItaniumRecordLayoutBuilder::FinishLayout(const NamedDecl *D) {
 
   // Set the size to the final size.
   setSize(RoundedSize);
+  if (Context.getLangOpts().ModLoader)
+    setSize(modloader::getStructSize(Context, D, getSize(), getDataSize(),
+                                     Alignment));
 
   unsigned CharBitNum = Context.getTargetInfo().getCharWidth();
   if (const RecordDecl *RD = dyn_cast<RecordDecl>(D)) {

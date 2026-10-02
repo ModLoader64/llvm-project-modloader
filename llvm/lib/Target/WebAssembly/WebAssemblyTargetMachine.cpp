@@ -17,6 +17,7 @@
 #include "WebAssembly.h"
 #include "WebAssemblyISelLowering.h"
 #include "WebAssemblyMachineFunctionInfo.h"
+#include "WebAssemblyModLoaderLowering.h"
 #include "WebAssemblyTargetObjectFile.h"
 #include "WebAssemblyTargetTransformInfo.h"
 #include "WebAssemblyUtilities.h"
@@ -94,6 +95,7 @@ LLVMInitializeWebAssemblyTarget() {
   initializeWebAssemblyPreLegalizerCombinerPass(PR);
   initializeWebAssemblyPostLegalizerCombinerPass(PR);
   initializeWebAssemblyAddMissingPrototypesPass(PR);
+  initializeWebAssemblyModLoaderLoweringLegacyPass(PR);
   initializeWebAssemblyLowerEmscriptenEHSjLjPass(PR);
   initializeLowerGlobalDtorsLegacyPassPass(PR);
   initializeFixFunctionBitcastsPass(PR);
@@ -223,6 +225,18 @@ WebAssemblyTargetMachine::WebAssemblyTargetMachine(
 }
 
 WebAssemblyTargetMachine::~WebAssemblyTargetMachine() = default; // anchor.
+
+bool WebAssemblyTargetMachine::isCompatibleDataLayout(
+    const DataLayout &Candidate) const {
+  auto Layout = DataLayout::parse(ModLoader::withoutGuestPointerLayouts(
+      Candidate.getStringRepresentation()));
+  if (!Layout) {
+    consumeError(Layout.takeError());
+    return false;
+  }
+
+  return CodeGenTargetMachineImpl::isCompatibleDataLayout(*Layout);
+}
 
 const WebAssemblySubtarget *WebAssemblyTargetMachine::getSubtargetImpl() const {
   return getSubtargetImpl(std::string(getTargetCPU()),
@@ -484,7 +498,18 @@ FunctionPass *WebAssemblyPassConfig::createTargetRegisterAllocator(bool) {
 // the CodeGen pass sequence.
 //===----------------------------------------------------------------------===//
 
+bool WebAssemblyTargetMachine::isNoopAddrSpaceCast(unsigned SrcAS,
+                                                   unsigned DestAS) const {
+  return isModLoaderNoopAddrSpaceCast(SrcAS, DestAS);
+}
+
+void WebAssemblyTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
+  registerModLoaderPassBuilderCallbacks(PB);
+}
+
 void WebAssemblyPassConfig::addIRPasses() {
+  addPass(createWebAssemblyModLoaderLowering());
+
   // Add signatures to prototype-less function declarations
   addPass(createWebAssemblyAddMissingPrototypes());
 

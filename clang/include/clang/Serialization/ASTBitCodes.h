@@ -747,6 +747,11 @@ enum ASTRecordTypes {
   /// Record that encodes the number of submodules, their base ID in the AST
   /// file, and for each module the relative bit offset into the stream.
   SUBMODULE_METADATA = 80,
+
+  // ModLoader
+  MODLOADER_SPACE = 1000,
+  MODLOADER_REGION = 1001,
+  MODLOADER_PREAMBLE_DEFAULTS = 1002,
 };
 
 /// Record types used within a source manager block.

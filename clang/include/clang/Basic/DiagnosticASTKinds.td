@@ -1100,4 +1100,11 @@ def warn_unpacked_field
 def warn_unaligned_access : Warning<
   "field %1 within %0 is less aligned than %2 and is usually due to %0 being "
   "packed, which can lead to unaligned accesses">, InGroup<UnalignedAccess>, DefaultIgnore;
+
+def err_modloader_field_offset_overlap : Error<
+  "'field_offset(%1)' puts %0 inside the previous field, which ends at %2">;
+def err_modloader_struct_size_too_small : Error<
+  "'struct_size(%1)' of %0 is smaller than its fields, which end at %2">;
+def err_modloader_struct_size_alignment : Error<
+  "'struct_size(%1)' of %0 is not a multiple of its alignment, %2">;
 }

@@ -167,6 +167,10 @@ class Context;
 
 } // namespace interp
 
+namespace modloader {
+class SpaceTable;
+}
+
 namespace serialization {
 template <class> class AbstractTypeReader;
 } // namespace serialization
@@ -799,6 +803,7 @@ private:
   const TargetInfo *AuxTarget = nullptr;
   clang::PrintingPolicy PrintingPolicy;
   mutable std::unique_ptr<interp::Context> InterpContext;
+  mutable std::unique_ptr<modloader::SpaceTable> ModLoaderSpaces;
   std::unique_ptr<ParentMapContext> ParentMapCtx;
 
   /// Keeps track of the deallocated DeclListNodes for future reuse.
@@ -857,6 +862,8 @@ public:
   /// Forwards to get node parents from the ParentMapContext. New callers should
   /// use ParentMapContext::getParents() directly.
   template <typename NodeT> DynTypedNodeList getParents(const NodeT &Node);
+
+  modloader::SpaceTable &getModLoaderSpaces() const;
 
   const clang::PrintingPolicy &getPrintingPolicy() const {
     return PrintingPolicy;

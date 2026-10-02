@@ -7043,6 +7043,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (!isa<PreprocessJobAction>(JA) || Output.getType() != types::TY_PP_Asm)
     Args.AddLastArg(CmdArgs, options::OPT_fzvector);
 
+  Args.addOptInFlag(CmdArgs, options::OPT_fmodloader,
+                    options::OPT_fno_modloader);
+
   Args.AddLastArg(CmdArgs, options::OPT_fdiagnostics_show_template_tree);
   Args.AddLastArg(CmdArgs, options::OPT_fno_elide_type);
 

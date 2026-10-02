@@ -1869,6 +1869,11 @@ void TypePrinter::printAttributedBefore(const AttributedType *T,
   if (T->getAttrKind() == attr::ObjCKindOf)
     OS << "__kindof ";
 
+  if (T->getAttrKind() == attr::ModLoaderHostSpace) {
+    OS << "space<host> ";
+    return printBefore(T->getModifiedType(), OS);
+  }
+
   if (T->getAttrKind() == attr::PreserveNone) {
     OS << "__attribute__((preserve_none)) ";
     spaceBeforePlaceHolder(OS);
@@ -1933,7 +1938,8 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
   // Some attributes are printed as qualifiers before the type, so we have
   // nothing left to do.
   if (T->getAttrKind() == attr::ObjCKindOf || T->isMSTypeSpec() ||
-      T->getImmediateNullability() || T->isWebAssemblyFuncrefSpec())
+      T->getImmediateNullability() || T->isWebAssemblyFuncrefSpec() ||
+      T->getAttrKind() == attr::ModLoaderHostSpace)
     return;
 
   // Don't print the inert __unsafe_unretained attribute at all.

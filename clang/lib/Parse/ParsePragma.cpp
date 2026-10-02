@@ -435,6 +435,11 @@ void Parser::initializePragmaHandlers() {
   MSStructHandler = std::make_unique<PragmaMSStructHandler>();
   PP.AddPragmaHandler(MSStructHandler.get());
 
+  if (getLangOpts().ModLoader) {
+    ModLoaderHandler = createModLoaderPragmaHandler();
+    PP.AddPragmaHandler(ModLoaderHandler.get());
+  }
+
   UnusedHandler = std::make_unique<PragmaUnusedHandler>();
   PP.AddPragmaHandler(UnusedHandler.get());
 
@@ -590,6 +595,12 @@ void Parser::resetPragmaHandlers() {
   PackHandler.reset();
   PP.RemovePragmaHandler(MSStructHandler.get());
   MSStructHandler.reset();
+
+  if (ModLoaderHandler) {
+    PP.RemovePragmaHandler(ModLoaderHandler.get());
+    ModLoaderHandler.reset();
+  }
+
   PP.RemovePragmaHandler(UnusedHandler.get());
   UnusedHandler.reset();
   PP.RemovePragmaHandler(WeakHandler.get());

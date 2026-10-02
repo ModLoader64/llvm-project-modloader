@@ -1654,6 +1654,10 @@ Parser::TryAnnotateName(CorrectionCandidateCallback *CCC,
                         ImplicitTypenameContext AllowImplicitTypename) {
   assert(Tok.is(tok::identifier) || Tok.is(tok::annot_cxxscope));
 
+  // ModLoader: leave 'space<name>' to the parser
+  if (isModLoaderSpaceQualifier())
+    return AnnotatedNameKind::Unresolved;
+
   const bool EnteringContext = false;
   const bool WasScopeAnnotation = Tok.is(tok::annot_cxxscope);
 
@@ -1865,6 +1869,9 @@ bool Parser::TryAnnotateTypeOrScopeToken(
           Tok.is(tok::kw___super) || Tok.is(tok::kw_auto) ||
           Tok.is(tok::annot_pack_indexing_type)) &&
          "Cannot be a type or scope token!");
+
+  if (isModLoaderSpaceQualifier())
+    return false;
 
   if (Tok.is(tok::kw_typename)) {
     // MSVC lets you do stuff like:

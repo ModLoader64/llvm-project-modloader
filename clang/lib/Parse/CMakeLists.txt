@@ -17,6 +17,7 @@ add_clang_library(clangParse
   ParseHLSL.cpp
   ParseHLSLRootSignature.cpp
   ParseInit.cpp
+  ParseModLoader.cpp
   ParseObjc.cpp
   ParseOpenMP.cpp
   ParsePragma.cpp

@@ -14367,4 +14367,27 @@ def err_cuda_device_kernel_launch_not_supported
 def err_cuda_device_kernel_launch_require_rdc
     : Error<"kernel launch from __device__ or __global__ function requires "
             "relocatable device code (i.e. requires -fgpu-rdc)">;
+
+def err_modloader_guest_definition : Error<
+  "guest object %0 cannot be defined in a module; declare it 'extern' and bind "
+  "it by name from the profile">;
+def err_modloader_guest_initializer : Error<
+  "guest object %0 cannot have an initializer">;
+def err_modloader_host_guest_cast : Error<
+  "%select{const_cast|static_cast|reinterpret_cast|dynamic_cast|C-style cast|"
+  "functional-style cast|addrspace_cast}0 from %1 to %2 mixes host and guest "
+  "pointers">;
+def err_modloader_space_cast_spaces : Error<
+  "'addrspace_cast' narrows a pointer from the flat space into a space it "
+  "contains; use 'reinterpret_cast' to go from %1 to %2">;
+def err_modloader_guest_host_member : Error<
+  "member %0 has the host-only type %1 and cannot be used in guest memory">;
+def err_modloader_guest_bitfield : Error<
+  "bit-field %0 cannot be used in guest memory; read the underlying integer "
+  "and mask it">;
+def err_modloader_guest_call : Error<
+  "%0 points to guest code, which a module cannot call; hook it or detour it "
+  "instead">;
+def err_modloader_field_offset_member : Error<
+  "'field_offset' cannot be applied to %select{a member of a union|a bit-field}0">;
 } // end of sema component.

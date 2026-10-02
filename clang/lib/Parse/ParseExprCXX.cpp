@@ -132,6 +132,9 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
   if (LastII)
     *LastII = nullptr;
 
+  if (isModLoaderSpaceQualifier())
+    return false;
+
   bool HasScopeSpecifier = false;
 
   if (Tok.is(tok::coloncolon)) {

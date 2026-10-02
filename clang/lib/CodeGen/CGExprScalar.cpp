@@ -14,6 +14,7 @@
 #include "CGCleanup.h"
 #include "CGDebugInfo.h"
 #include "CGHLSLRuntime.h"
+#include "CGModLoader.h"
 #include "CGObjCRuntime.h"
 #include "CGOpenMPRuntime.h"
 #include "CGRecordLayout.h"
@@ -2865,6 +2866,11 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         Visit(E);
       return CGF.CGM.getNullPointer(cast<llvm::PointerType>(DestLTy), DestTy);
     }
+    if (CGF.getLangOpts().ModLoader) {
+      if (Value *Checked = emitModLoaderRangeCheckedCast(CGF, CE))
+        return Checked;
+    }
+
     // Since target may map different address spaces in AST to the same address
     // space, an address space conversion may end up as a bitcast.
     return CGF.performAddrSpaceCast(Visit(E), DestLTy);

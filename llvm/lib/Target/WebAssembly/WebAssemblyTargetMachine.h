@@ -44,6 +44,8 @@ public:
 
   ~WebAssemblyTargetMachine() override;
 
+  bool isCompatibleDataLayout(const DataLayout &Candidate) const override;
+
   const WebAssemblySubtarget *getSubtargetImpl() const;
   const WebAssemblySubtarget *getSubtargetImpl(std::string CPU,
                                                std::string FS) const;
@@ -52,6 +54,7 @@ public:
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+  void registerPassBuilderCallbacks(PassBuilder &PB) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
@@ -62,6 +65,8 @@ public:
                             const TargetSubtargetInfo *STI) const override;
 
   TargetTransformInfo getTargetTransformInfo(const Function &F) const override;
+
+  bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override;
 
   bool usesPhysRegsForValues() const override { return false; }
 

@@ -18,6 +18,7 @@
 #include "CGCall.h"
 #include "CGDebugInfo.h"
 #include "CGHLSLRuntime.h"
+#include "CGModLoader.h"
 #include "CGObjCRuntime.h"
 #include "CGOpenCLRuntime.h"
 #include "CGOpenMPRuntime.h"
@@ -1129,6 +1130,9 @@ CodeGenModule::StackProtectorAttribute(const Decl *D) const {
 }
 
 void CodeGenModule::Release() {
+  if (LangOpts.ModLoader)
+    emitModLoaderMetadata(*this);
+
   Module *Primary = getContext().getCurrentNamedModule();
   if (CXX20ModuleInits && Primary && !Primary->isHeaderLikeModule())
     EmitModuleInitializers(Primary);
@@ -5969,6 +5973,9 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName, llvm::Type *Ty,
     GV->setAlignment(getContext().getDeclAlign(D).getAsAlign());
 
     setLinkageForGV(GV, D);
+
+    if (LangOpts.ModLoader)
+      setModLoaderSymbol(*this, GV, D);
 
     if (D->getTLSKind()) {
       if (D->getTLSKind() == VarDecl::TLS_Dynamic)

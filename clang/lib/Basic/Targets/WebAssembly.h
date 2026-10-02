@@ -16,6 +16,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/TargetParser/ModLoaderAddressSpaces.h"
 #include "llvm/TargetParser/Triple.h"
 
 namespace clang {
@@ -230,9 +231,42 @@ public:
     resetDataLayout();
   }
 
+  bool isAddressSpaceSupersetOf(LangAS A, LangAS B) const override {
+    return A == B ||
+           (isModLoaderGuestAddressSpace(A) &&
+            llvm::ModLoader::getGuestSpaceId(toTargetAddressSpace(A)) == 0 &&
+            isModLoaderGuestAddressSpace(B));
+  }
+
 protected:
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override;
+
+  static bool isModLoaderGuestAddressSpace(LangAS AS) {
+    return isTargetAddressSpace(AS) &&
+           llvm::ModLoader::isGuestAddressSpace(toTargetAddressSpace(AS));
+  }
+
+  static unsigned getModLoaderGuestWidth(LangAS AS) {
+    return llvm::ModLoader::getGuestPointerWidth(toTargetAddressSpace(AS));
+  }
+
+  uint64_t getPointerWidthV(LangAS AS) const override {
+    return isModLoaderGuestAddressSpace(AS) ? getModLoaderGuestWidth(AS)
+                                            : PointerWidth;
+  }
+
+  uint64_t getPointerAlignV(LangAS AS) const override {
+    return isModLoaderGuestAddressSpace(AS) ? getModLoaderGuestWidth(AS)
+                                            : PointerAlign;
+  }
+
+  IntType getPtrDiffTypeV(LangAS AS) const override {
+    if (!isModLoaderGuestAddressSpace(AS))
+      return PtrDiffType;
+
+    return getModLoaderGuestWidth(AS) == 64 ? SignedLongLong : SignedInt;
+  }
 };
 } // namespace targets
 } // namespace clang

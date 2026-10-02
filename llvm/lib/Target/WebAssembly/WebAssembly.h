@@ -29,6 +29,8 @@ class ModulePass;
 class FunctionPass;
 
 // LLVM IR passes.
+ModulePass *createWebAssemblyModLoaderLowering();
+void initializeWebAssemblyModLoaderLoweringLegacyPass(PassRegistry &);
 ModulePass *createWebAssemblyLowerEmscriptenEHSjLj();
 ModulePass *createWebAssemblyAddMissingPrototypes();
 ModulePass *createWebAssemblyFixFunctionBitcasts();

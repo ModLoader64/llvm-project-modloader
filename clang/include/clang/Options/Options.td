@@ -6091,6 +6091,12 @@ defm zvector : BoolFOption<"zvector",
 def mzvector : Flag<["-"], "mzvector">, Alias<fzvector>;
 def mno_zvector : Flag<["-"], "mno-zvector">, Alias<fno_zvector>;
 
+defm modloader : BoolFOption<"modloader",
+  LangOpts<"ModLoader">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+          "Enable ModLoader guest memory extensions for wasm64">,
+  NegFlag<SetFalse>>;
+
 def mxcoff_build_id_EQ : Joined<["-"], "mxcoff-build-id=">, Group<Link_Group>, MetaVarName<"<0xHEXSTRING>">,
   HelpText<"On AIX, request creation of a build-id string, \"0xHEXSTRING\", in the string table of the loader section inside the linked binary">;
 def mignore_xcoff_visibility : Flag<["-"], "mignore-xcoff-visibility">, Group<m_Group>,

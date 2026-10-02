@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CheckExprLifetime.h"
+#include "SemaModLoader.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
@@ -6715,6 +6716,9 @@ void InitializationSequence::InitializeFrom(Sema &S,
       }
       Args[I] = result.get();
     }
+
+  if (S.getLangOpts().ModLoader)
+    modloader::convertGuestSource(S, Entity, Args);
 
   // C++0x [dcl.init]p16:
   //   The semantics of initializers are as follows. The destination type is

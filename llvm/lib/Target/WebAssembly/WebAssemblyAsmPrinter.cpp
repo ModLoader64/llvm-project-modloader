@@ -216,6 +216,13 @@ void WebAssemblyAsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
     assert(getSymbolPreferLocal(*GV) == Sym);
     emitLinkage(GV, Sym);
     OutStreamer->emitLabel(Sym);
+    if (GV->hasAttribute("wasm-export-name")) {
+      StringRef ExportName =
+          GV->getAttribute("wasm-export-name").getValueAsString();
+      Sym->setExportName(OutContext.allocateString(ExportName));
+      getTargetStreamer()->emitExportName(Sym, ExportName);
+    }
+
     // TODO: Actually emit the initializer value.  Otherwise the global has the
     // default value for its type (0, ref.null, etc).
     OutStreamer->addBlankLine();

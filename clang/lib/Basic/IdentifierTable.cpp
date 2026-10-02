@@ -298,6 +298,10 @@ void IdentifierTable::AddKeywords(const LangOptions &LangOpts) {
   if (LangOpts.IEEE128)
     AddKeyword("__ieee128", tok::kw___float128, KEYALL, LangOpts, *this);
 
+  if (LangOpts.ModLoader && LangOpts.CPlusPlus)
+    AddKeyword("addrspace_cast", tok::kw_addrspace_cast, KEYALL, LangOpts,
+               *this);
+
   // Add the 'import' and 'module' contextual keywords.
   get("import").setKeywordImport(true);
   get("module").setModuleKeyword(true);
@@ -310,6 +314,9 @@ void IdentifierTable::AddKeywords(const LangOptions &LangOpts) {
 /// \returns Status of the keyword in the language.
 static KeywordStatus getTokenKwStatus(const LangOptions &LangOpts,
                                       tok::TokenKind K) {
+  if (K == tok::kw_addrspace_cast && LangOpts.ModLoader && LangOpts.CPlusPlus)
+    return KS_Enabled;
+
   switch (K) {
 #define KEYWORD(NAME, FLAGS) \
   case tok::kw_##NAME: return getKeywordStatus(LangOpts, FLAGS);

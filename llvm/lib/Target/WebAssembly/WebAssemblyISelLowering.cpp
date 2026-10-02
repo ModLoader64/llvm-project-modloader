@@ -91,6 +91,13 @@ WebAssemblyTargetLowering::WebAssemblyTargetLowering(
     setOperationAction(ISD::LOAD, T, Custom);
     setOperationAction(ISD::STORE, T, Custom);
   }
+
+  for (auto T : {MVT::i32, MVT::i64})
+    for (auto MemT : {MVT::i8, MVT::i16, MVT::i32})
+      if (MVT(MemT).bitsLT(T))
+        for (auto Ext : {ISD::EXTLOAD, ISD::ZEXTLOAD, ISD::SEXTLOAD})
+          setLoadExtAction(Ext, T, MemT, Custom);
+
   if (Subtarget->hasSIMD128()) {
     for (auto T : {MVT::v16i8, MVT::v8i16, MVT::v4i32, MVT::v4f32, MVT::v2i64,
                    MVT::v2f64}) {
@@ -1054,6 +1061,22 @@ bool WebAssemblyTargetLowering::isVectorLoadExtDesirable(SDValue ExtVal) const {
          (ExtT == MVT::v2i64 && MemT == MVT::v2i32);
 }
 
+TargetLowering::LegalizeAction WebAssemblyTargetLowering::getCustomLoadAction(
+    EVT ValVT, EVT MemVT, Align Alignment, unsigned AddrSpace, unsigned ExtType,
+    bool Atomic) const {
+  return WebAssembly::isWasmVarAddressSpace(AddrSpace) ? Expand : Legal;
+}
+
+bool WebAssemblyTargetLowering::shouldReduceLoadWidth(
+    SDNode *Load, ISD::LoadExtType ExtTy, EVT NewVT,
+    std::optional<unsigned> ByteOffset) const {
+  if (WebAssembly::isWasmVarAddressSpace(
+          cast<LoadSDNode>(Load)->getAddressSpace()))
+    return false;
+
+  return TargetLowering::shouldReduceLoadWidth(Load, ExtTy, NewVT, ByteOffset);
+}
+
 bool WebAssemblyTargetLowering::isOffsetFoldingLegal(
     const GlobalAddressSDNode *GA) const {
   // Wasm doesn't support function addresses with offsets
@@ -1823,6 +1846,9 @@ SDValue WebAssemblyTargetLowering::LowerOperation(SDValue Op,
 }
 
 static bool IsWebAssemblyGlobal(SDValue Op) {
+  if (Op.getOpcode() == WebAssemblyISD::Wrapper)
+    Op = Op.getOperand(0);
+
   if (const GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(Op))
     return WebAssembly::isWasmVarAddressSpace(GA->getAddressSpace());
 

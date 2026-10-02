@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "SemaModLoader.h"
 #include "TypeLocBuilder.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
@@ -6570,6 +6571,9 @@ NamedDecl *Sema::HandleDeclarator(Scope *S, Declarator &D,
                                       UPPC_DeclarationType))
     D.setInvalidType();
 
+  if (getLangOpts().ModLoader && modloader::isGameFunction(*this, D, R))
+    return nullptr;
+
   LookupResult Previous(*this, NameInfo, LookupOrdinaryName,
                         forRedeclarationInCurContext());
 
@@ -8220,6 +8224,9 @@ NamedDecl *Sema::ActOnVariableDeclarator(
     }
   }
 
+  if (getLangOpts().ModLoader)
+    modloader::setDefaultSpace(*this, NewVD);
+
   if (getLangOpts().OpenCL) {
     deduceOpenCLAddressSpace(NewVD);
 
@@ -8958,6 +8965,9 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
     NewVD->setInvalidDecl();
     return;
   }
+
+  if (getLangOpts().ModLoader && !modloader::checkGuestVariable(*this, NewVD))
+    return;
 
   // OpenCL v1.2 s6.8 - The static qualifier is valid only in program
   // scope.
@@ -13971,6 +13981,10 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     RealDecl->setInvalidDecl();
     return;
   }
+
+  if (getLangOpts().ModLoader &&
+      !modloader::checkGuestInitializer(*this, VDecl))
+    return;
 
   if (VDecl->isInvalidDecl()) {
     ExprResult Recovery =
@@ -20338,6 +20352,8 @@ void Sema::ActOnFields(Scope *S, SourceLocation RecLoc, Decl *EnclosingDecl,
 
     // Handle attributes before checking the layout.
     ProcessDeclAttributeList(S, Record, Attrs);
+    if (getLangOpts().ModLoader)
+      modloader::finishRecord(*this, Record);
 
     // Maybe randomize the record's decls. We automatically randomize a record
     // of function pointers, unless it has the "no_randomize_layout" attribute.

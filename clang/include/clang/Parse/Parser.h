@@ -2376,6 +2376,10 @@ private:
   void ParseBorlandTypeAttributes(ParsedAttributes &attrs);
   void ParseOpenCLKernelAttributes(ParsedAttributes &attrs);
   void ParseOpenCLQualifiers(ParsedAttributes &Attrs);
+  bool isModLoaderSpaceQualifier();
+  void ParseModLoaderSpaceQualifier(ParsedAttributes &Attrs);
+  void ConsumeModLoaderQualifier();
+  std::unique_ptr<PragmaHandler> createModLoaderPragmaHandler();
   void ParseNullabilityTypeSpecifiers(ParsedAttributes &attrs);
   void ParseCUDAFunctionAttributes(ParsedAttributes &attrs);
   bool isHLSLQualifier(const Token &Tok) const;
@@ -7098,6 +7102,7 @@ private:
   std::unique_ptr<PragmaHandler> OptionsHandler;
   std::unique_ptr<PragmaHandler> PackHandler;
   std::unique_ptr<PragmaHandler> MSStructHandler;
+  std::unique_ptr<PragmaHandler> ModLoaderHandler;
   std::unique_ptr<PragmaHandler> UnusedHandler;
   std::unique_ptr<PragmaHandler> WeakHandler;
   std::unique_ptr<PragmaHandler> RedefineExtnameHandler;

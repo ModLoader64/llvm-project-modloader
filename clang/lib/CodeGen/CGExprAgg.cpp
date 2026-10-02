@@ -13,6 +13,7 @@
 #include "CGCXXABI.h"
 #include "CGDebugInfo.h"
 #include "CGHLSLRuntime.h"
+#include "CGModLoader.h"
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
 #include "CodeGenFunction.h"
@@ -2315,6 +2316,10 @@ void CodeGenFunction::EmitAggregateCopy(LValue Dest, LValue Src, QualType Ty,
 
   Address DestPtr = Dest.getAddress();
   Address SrcPtr = Src.getAddress();
+
+  if (getLangOpts().ModLoader &&
+      emitModLoaderAggregateCopy(*this, DestPtr, SrcPtr, Ty, isVolatile))
+    return;
 
   if (getLangOpts().CPlusPlus) {
     if (const auto *Record = Ty->getAsCXXRecordDecl()) {
