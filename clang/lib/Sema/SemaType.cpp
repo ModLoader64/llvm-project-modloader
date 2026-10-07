@@ -4712,11 +4712,14 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
   // `DeclaratorChunk`s. E.g. it must be false if Clang recovers from
   // an error by replacing the type with `int`.
   bool AreDeclaratorChunksValid = true;
+  std::optional<LangAS> ModLoaderPointerSpace;
   for (unsigned i = 0, e = D.getNumTypeObjects(); i != e; ++i) {
     unsigned chunkIndex = e - i - 1;
     state.setCurrentChunkIndex(chunkIndex);
     DeclaratorChunk &DeclType = D.getTypeObject(chunkIndex);
     IsQualifiedFunction &= DeclType.Kind == DeclaratorChunk::Paren;
+    if (DeclType.Kind == DeclaratorChunk::Function)
+      ModLoaderPointerSpace.reset();
     switch (DeclType.Kind) {
     case DeclaratorChunk::Paren:
       if (i == 0)
@@ -4774,8 +4777,17 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         }
       }
 
-      if (LangOpts.ModLoader)
-        T = modloader::withDefaultSpace(Context, T);
+      if (LangOpts.ModLoader) {
+        // A space qualifier covers the pointer chain
+        if (T.hasAddressSpace())
+          ModLoaderPointerSpace = T.getAddressSpace();
+        else if (T->hasAttr(attr::ModLoaderHostSpace))
+          ModLoaderPointerSpace = LangAS::Default;
+        else if (ModLoaderPointerSpace)
+          T = Context.getAddrSpaceQualType(T, *ModLoaderPointerSpace);
+        else
+          T = modloader::withDefaultSpace(Context, T);
+      }
 
       T = S.BuildPointerType(T, DeclType.Loc, Name);
       if (DeclType.Ptr.TypeQuals)
