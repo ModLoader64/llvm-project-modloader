@@ -28,6 +28,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/MatrixUtils.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
@@ -3504,9 +3505,12 @@ ScalarExprEmitter::EmitScalarPrePostIncDec(const UnaryOperator *E, LValue LV,
   } else if (const PointerType *ptr = type->getAs<PointerType>()) {
     QualType type = ptr->getPointeeType();
 
-    // VLA types don't have constant size.
-    if (const VariableArrayType *vla
-          = CGF.getContext().getAsVariableArrayType(type)) {
+    if (Value *Dynamic = emitModLoaderPointerOffset(CGF, value, type,
+                                                    Builder.getInt32(amount))) {
+      value = Dynamic;
+    } else if (const VariableArrayType *vla =
+                   CGF.getContext().getAsVariableArrayType(type)) {
+      // VLA types don't have constant size.
       llvm::Value *numElts = CGF.getVLASize(vla).NumElts;
       if (!isInc) numElts = Builder.CreateNSWNeg(numElts, "vla.negsize");
       llvm::Type *elemTy = CGF.ConvertTypeForMem(vla->getElementType());
@@ -3775,6 +3779,8 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
   llvm::Type* ResultType = ConvertType(E->getType());
   llvm::Value* Result = llvm::Constant::getNullValue(ResultType);
   QualType CurrentType = E->getTypeSourceInfo()->getType();
+  bool RuntimeLayout = modloader::hasRuntimeLayout(CurrentType);
+  LangAS LayoutSpace = CurrentType.getAddressSpace();
   for (unsigned i = 0; i != n; ++i) {
     OffsetOfNode ON = E->getComponent(i);
     llvm::Value *Offset = nullptr;
@@ -3794,6 +3800,12 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
       llvm::Value* ElemSize = llvm::ConstantInt::get(ResultType,
           CGF.getContext().getTypeSizeInChars(CurrentType).getQuantity());
 
+      if (RuntimeLayout)
+        if (auto *Dynamic =
+                emitModLoaderSize(CGF, CGF.getContext().getAddrSpaceQualType(
+                                           CurrentType, LayoutSpace)))
+          ElemSize = Builder.CreateZExtOrTrunc(Dynamic, ResultType);
+
       // Multiply out to compute the result
       Offset = Builder.CreateMul(Idx, ElemSize);
       break;
@@ -3811,6 +3823,9 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
       int64_t OffsetInt =
           RL.getFieldOffset(FieldIndex) / CGF.getContext().getCharWidth();
       Offset = llvm::ConstantInt::get(ResultType, OffsetInt);
+      if (RuntimeLayout)
+        if (auto *Dynamic = emitModLoaderFieldLayout(CGF, MemberDecl))
+          Offset = Builder.CreateZExtOrTrunc(Dynamic, ResultType);
 
       // Save the element type.
       CurrentType = MemberDecl->getType();
@@ -3849,6 +3864,8 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
 Value *
 ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
                               const UnaryExprOrTypeTraitExpr *E) {
+  if (Value *Layout = emitModLoaderLayoutQuery(CGF, E))
+    return Layout;
   QualType TypeToSize = E->getTypeOfArgument();
   if (auto Kind = E->getKind();
       Kind == UETT_SizeOf || Kind == UETT_DataSizeOf || Kind == UETT_CountOf) {
@@ -4589,6 +4606,9 @@ llvm::Value *CodeGenFunction::EmitPointerArithmetic(
   }
 
   QualType elementType = pointerType->getPointeeType();
+  if (llvm::Value *Dynamic =
+          emitModLoaderPointerOffset(*this, pointer, elementType, index))
+    return Dynamic;
   if (const VariableArrayType *vla =
           getContext().getAsVariableArrayType(elementType)) {
     // The element count here is the total number of non-VLA elements.
@@ -4983,6 +5003,10 @@ Value *ScalarExprEmitter::EmitSub(const BinOpInfo &op) {
   QualType elementType = expr->getLHS()->getType()->getPointeeType();
 
   llvm::Value *divisor = nullptr;
+  if (llvm::Value *Size = emitModLoaderSize(CGF, elementType))
+    return Builder.CreateExactSDiv(
+        diffInChars, Builder.CreateZExtOrTrunc(Size, CGF.PtrDiffTy),
+        "guest.diff");
 
   // For a variable-length array, this is going to be non-constant.
   if (const VariableArrayType *vla

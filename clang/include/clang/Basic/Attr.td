@@ -3747,6 +3747,13 @@ def ModLoaderStructSize : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def ModLoaderRuntimeLayout : InheritableAttr {
+  let Spellings = [Clang<"modloader_runtime_layout">];
+  let Subjects = SubjectList<[Record]>;
+  let LangOpts = [ModLoader];
+  let Documentation = [Undocumented];
+}
+
 def ModLoaderGuestABI : InheritableAttr {
   let Spellings = [];
   let Subjects = SubjectList<[Record]>;

@@ -2,6 +2,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/Expr.h"
 #include "clang/Basic/DiagnosticAST.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
@@ -224,4 +225,42 @@ QualType modloader::withDefaultSpace(const ASTContext &Context, QualType T) {
     return Context.getAddrSpaceQualType(T, *AS);
 
   return T;
+}
+
+bool modloader::hasRuntimeLayout(QualType T) {
+  if (T.isNull())
+    return false;
+  if (const auto *Reference = T->getAs<ReferenceType>())
+    T = Reference->getPointeeType();
+  if (!isGuestAddressSpace(T.getAddressSpace()))
+    return false;
+  const auto *Record = T->getBaseElementTypeUnsafe()->getAs<RecordType>();
+  return Record && Record->getDecl()
+                       ->getDefinitionOrSelf()
+                       ->hasAttr<ModLoaderRuntimeLayoutAttr>();
+}
+
+bool modloader::isRuntimeLayoutQuery(const Expr *E) {
+  if (const auto *Trait = dyn_cast<UnaryExprOrTypeTraitExpr>(E)) {
+    if (Trait->getKind() != UETT_SizeOf &&
+        Trait->getKind() != UETT_DataSizeOf &&
+        Trait->getKind() != UETT_AlignOf &&
+        Trait->getKind() != UETT_PreferredAlignOf)
+      return false;
+    if (hasRuntimeLayout(Trait->getTypeOfArgument()))
+      return true;
+    if (!Trait->isArgumentType()) {
+      const auto *Member =
+          dyn_cast<MemberExpr>(Trait->getArgumentExpr()->IgnoreParens());
+      if (Member && isa<FieldDecl>(Member->getMemberDecl())) {
+        QualType Base = Member->getBase()->getType();
+        if (Member->isArrow())
+          Base = Base->getPointeeType();
+        return hasRuntimeLayout(Base);
+      }
+    }
+  }
+  if (const auto *Offset = dyn_cast<OffsetOfExpr>(E))
+    return hasRuntimeLayout(Offset->getTypeSourceInfo()->getType());
+  return false;
 }

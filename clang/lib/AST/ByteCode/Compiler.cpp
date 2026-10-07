@@ -17,6 +17,7 @@
 #include "Program.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/DynamicRecursiveASTVisitor.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "llvm/Support/SaveAndRestore.h"
 
 using namespace clang;
@@ -2741,6 +2742,8 @@ static CharUnits AlignOfType(QualType T, const ASTContext &ASTCtx,
 template <class Emitter>
 bool Compiler<Emitter>::VisitUnaryExprOrTypeTraitExpr(
     const UnaryExprOrTypeTraitExpr *E) {
+  if (modloader::isRuntimeLayoutQuery(E))
+    return false;
 
   UnaryExprOrTypeTrait Kind = E->getKind();
   const ASTContext &ASTCtx = Ctx.getASTContext();
@@ -4023,6 +4026,8 @@ bool Compiler<Emitter>::VisitSourceLocExpr(const SourceLocExpr *E) {
 
 template <class Emitter>
 bool Compiler<Emitter>::VisitOffsetOfExpr(const OffsetOfExpr *E) {
+  if (modloader::isRuntimeLayoutQuery(E))
+    return false;
   unsigned N = E->getNumComponents();
   if (N == 0)
     return false;

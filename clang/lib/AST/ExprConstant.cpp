@@ -45,6 +45,7 @@
 #include "clang/AST/CurrentSourceLocExprScope.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/InferAlloc.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/OSLog.h"
 #include "clang/AST/OptionalDiagnostic.h"
 #include "clang/AST/RecordLayout.h"
@@ -9678,6 +9679,12 @@ bool LValueExprEvaluator::VisitCXXUuidofExpr(const CXXUuidofExpr *E) {
 }
 
 bool LValueExprEvaluator::VisitMemberExpr(const MemberExpr *E) {
+  QualType BaseType = E->getBase()->getType();
+  if (E->isArrow())
+    BaseType = BaseType->getPointeeType();
+  if (isa<FieldDecl>(E->getMemberDecl()) &&
+      modloader::hasRuntimeLayout(BaseType))
+    return Error(E);
   // Handle static data members.
   if (const VarDecl *VD = dyn_cast<VarDecl>(E->getMemberDecl())) {
     VisitIgnoredBaseExpression(E->getBase());
@@ -19470,6 +19477,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
 /// a result as the expression's type.
 bool IntExprEvaluator::VisitUnaryExprOrTypeTraitExpr(
                                     const UnaryExprOrTypeTraitExpr *E) {
+  if (modloader::isRuntimeLayoutQuery(E))
+    return Error(E);
   switch(E->getKind()) {
   case UETT_PreferredAlignOf:
   case UETT_AlignOf: {
@@ -19589,6 +19598,8 @@ bool IntExprEvaluator::VisitUnaryExprOrTypeTraitExpr(
 }
 
 bool IntExprEvaluator::VisitOffsetOfExpr(const OffsetOfExpr *OOE) {
+  if (modloader::isRuntimeLayoutQuery(OOE))
+    return Error(OOE);
   Info.Ctx.recordOffsetOfEvaluation(OOE);
   CharUnits Result;
   unsigned n = OOE->getNumComponents();
@@ -22342,6 +22353,8 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     return CheckEvalInICE(E, Ctx);
   }
   case Expr::UnaryExprOrTypeTraitExprClass: {
+    if (modloader::isRuntimeLayoutQuery(E))
+      return ICEDiag(IK_NotICE, E->getBeginLoc());
     const UnaryExprOrTypeTraitExpr *Exp = cast<UnaryExprOrTypeTraitExpr>(E);
     if ((Exp->getKind() ==  UETT_SizeOf) &&
         Exp->getTypeOfArgument()->isVariableArrayType())

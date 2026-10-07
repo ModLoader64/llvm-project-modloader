@@ -17,6 +17,7 @@
 #include "CGCleanup.h"
 #include "CGDebugInfo.h"
 #include "CGHLSLRuntime.h"
+#include "CGModLoader.h"
 #include "CGObjCRuntime.h"
 #include "CGOpenMPRuntime.h"
 #include "CGRecordLayout.h"
@@ -32,6 +33,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/InferAlloc.h"
 #include "clang/AST/MatrixUtils.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/NSAPI.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/StmtVisitor.h"
@@ -4836,6 +4838,10 @@ static Address emitArraySubscriptGEP(CodeGenFunction &CGF, Address addr,
     eltType = getFixedSizeElementType(CGF.getContext(), vla);
   }
 
+  if (llvm::Value *Dynamic = emitModLoaderPointerOffset(
+          CGF, addr.emitRawPointer(CGF), eltType, indices.back()))
+    return Address(Dynamic, CGF.ConvertTypeForMem(eltType), CharUnits::One());
+
   // We can use that to compute the best alignment of the element.
   CharUnits eltSize = CGF.getContext().getTypeSizeInChars(eltType);
   CharUnits eltAlign =
@@ -5790,6 +5796,22 @@ LValue CodeGenFunction::EmitLValueForField(LValue base, const FieldDecl *field,
                                            bool IsInBounds) {
   LValueBaseInfo BaseInfo = base.getBaseInfo();
 
+  if (llvm::ModLoader::isGuestAddressSpace(
+          base.getAddress().getAddressSpace()) &&
+      field->getParent()->hasAttr<ModLoaderRuntimeLayoutAttr>() &&
+      !field->isBitField()) {
+    llvm::Value *Offset = emitModLoaderFieldLayout(*this, field);
+    QualType FieldType = field->getType();
+    llvm::Value *Pointer = Builder.CreateGEP(
+        Int8Ty, base.getAddress().emitRawPointer(*this), Offset, "guest.field");
+    Address FieldAddress(Pointer, ConvertTypeForMem(FieldType),
+                         CharUnits::One());
+    LValue Result = MakeAddrLValue(FieldAddress, FieldType, BaseInfo,
+                                   TBAAAccessInfo::getMayAliasInfo());
+    Result.getQuals().addCVRQualifiers(base.getVRQualifiers());
+    return Result;
+  }
+
   if (field->isBitField()) {
     const CGRecordLayout &RL =
         CGM.getTypes().getCGRecordLayout(field->getParent());
@@ -5805,7 +5827,24 @@ LValue CodeGenFunction::EmitLValueForField(LValue base, const FieldDecl *field,
     const RecordDecl *rec = field->getParent();
     if (hasBPFPreserveStaticOffset(rec))
       Addr = wrapWithBPFPreserveStaticOffset(*this, Addr);
-    if (!UseVolatile) {
+    bool RuntimeLayout =
+        llvm::ModLoader::isGuestAddressSpace(Addr.getAddressSpace()) &&
+        rec->hasAttr<ModLoaderRuntimeLayoutAttr>();
+    if (RuntimeLayout) {
+      llvm::Value *Offset = emitModLoaderFieldLayout(*this, field);
+      uint64_t FieldOffset =
+          getContext().getASTRecordLayout(rec).getFieldOffset(
+              field->getFieldIndex()) /
+          getContext().getCharWidth();
+      Offset = Builder.CreateSub(Offset,
+                                 llvm::ConstantInt::get(SizeTy, FieldOffset));
+      Offset = Builder.CreateAdd(
+          Offset,
+          llvm::ConstantInt::get(SizeTy, Info.StorageOffset.getQuantity()));
+      Addr =
+          Address(Builder.CreateGEP(Int8Ty, Addr.emitRawPointer(*this), Offset),
+                  Addr.getElementType(), CharUnits::One());
+    } else if (!UseVolatile) {
       if (!IsInPreservedAIRegion &&
           (!getDebugInfo() || !rec->hasAttr<BPFPreserveAccessIndexAttr>())) {
         if (Idx != 0) {
@@ -6791,6 +6830,20 @@ LValue CodeGenFunction::EmitBinaryOperatorLValue(const BinaryOperator *E) {
     return EmitComplexAssignmentLValue(E);
 
   case TEK_Aggregate:
+    if (getLangOpts().ModLoader &&
+        E->getType().isTriviallyCopyableType(getContext()) &&
+        (modloader::isGuestAddressSpace(
+             E->getLHS()->getType().getAddressSpace()) ||
+         modloader::isGuestAddressSpace(
+             E->getRHS()->getType().getAddressSpace()))) {
+      LValue LHS = EmitCheckedLValue(E->getLHS(), TCK_Store);
+      EmitAggExpr(E->getRHS(),
+                  AggValueSlot::forLValue(LHS, AggValueSlot::IsDestructed,
+                                          AggValueSlot::DoesNotNeedGCBarriers,
+                                          AggValueSlot::IsAliased,
+                                          AggValueSlot::MayOverlap));
+      return LHS;
+    }
     // If the lang opt is HLSL and the LHS is a constant array
     // then we are performing a copy assignment and call a special
     // function because EmitAggExprToLValue emits to a temporary LValue

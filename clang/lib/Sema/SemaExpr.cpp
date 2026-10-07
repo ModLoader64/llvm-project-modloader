@@ -30,6 +30,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/MangleNumberingContext.h"
+#include "clang/AST/ModLoaderSpaces.h"
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/Type.h"
@@ -4900,6 +4901,12 @@ Sema::ActOnUnaryExprOrTypeTraitExpr(SourceLocation OpLoc,
   if (IsType) {
     TypeSourceInfo *TInfo;
     (void) GetTypeFromParser(ParsedType::getFromOpaquePtr(TyOrEx), &TInfo);
+    if (TInfo && getLangOpts().ModLoader && CurContext->isFunctionOrMethod()) {
+      QualType Type = modloader::withDefaultSpace(Context, TInfo->getType());
+      if (modloader::hasRuntimeLayout(Type) && Type != TInfo->getType())
+        TInfo = Context.getTrivialTypeSourceInfo(
+            Type, TInfo->getTypeLoc().getBeginLoc());
+    }
     return CreateUnaryExprOrTypeTraitExpr(TInfo, OpLoc, ExprKind, ArgRange);
   }
 
@@ -6573,8 +6580,21 @@ static FunctionDecl *rewriteBuiltinFunctionDecl(Sema *Sema, ASTContext &Context,
 
   FunctionProtoType::ExtProtoInfo EPI;
   EPI.Variadic = FT->isVariadic();
-  QualType OverloadTy = Context.getFunctionType(FT->getReturnType(),
-                                                OverloadParams, EPI);
+  QualType ReturnType = FT->getReturnType();
+  if (Sema->getLangOpts().ModLoader && ReturnType->isPointerType() &&
+      (FDecl->getBuiltinID() == Builtin::BImemcpy ||
+       FDecl->getBuiltinID() == Builtin::BI__builtin_memcpy ||
+       FDecl->getBuiltinID() == Builtin::BImemmove ||
+       FDecl->getBuiltinID() == Builtin::BI__builtin_memmove ||
+       FDecl->getBuiltinID() == Builtin::BImemset ||
+       FDecl->getBuiltinID() == Builtin::BI__builtin_memset)) {
+    QualType Pointee = Context.getAddrSpaceQualType(
+        ReturnType->getPointeeType(),
+        OverloadParams.front()->getPointeeType().getAddressSpace());
+    ReturnType = Context.getPointerType(Pointee);
+  }
+  QualType OverloadTy =
+      Context.getFunctionType(ReturnType, OverloadParams, EPI);
   DeclContext *Parent = FDecl->getParent();
   FunctionDecl *OverloadDecl = FunctionDecl::Create(
       Context, Parent, FDecl->getLocation(), FDecl->getLocation(),
@@ -6956,10 +6976,14 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
       if ((FDecl =
                rewriteBuiltinFunctionDecl(this, Context, FDecl, ArgExprs))) {
         NDecl = FDecl;
+        QualType FunctionType = Fn->getType();
+        if (getLangOpts().ModLoader &&
+            !FunctionType->isSpecificBuiltinType(BuiltinType::BuiltinFn))
+          FunctionType = FDecl->getType();
         Fn = DeclRefExpr::Create(
             Context, DRE->getQualifierLoc(), SourceLocation(), FDecl, false,
-            SourceLocation(), Fn->getType() /* BuiltinFnTy */,
-            Fn->getValueKind(), FDecl, nullptr, DRE->isNonOdrUse());
+            SourceLocation(), FunctionType, Fn->getValueKind(), FDecl, nullptr,
+            DRE->isNonOdrUse());
       }
     }
   } else if (auto *ME = dyn_cast<MemberExpr>(NakedFn))
@@ -16686,6 +16710,14 @@ ExprResult Sema::BuildBuiltinOffsetOf(SourceLocation BuiltinLoc,
                                       const Designation &Desig,
                                       SourceLocation RParenLoc) {
   QualType ArgTy = TInfo->getType();
+  if (getLangOpts().ModLoader && CurContext->isFunctionOrMethod()) {
+    QualType Type = modloader::withDefaultSpace(Context, ArgTy);
+    if (modloader::hasRuntimeLayout(Type) && Type != ArgTy) {
+      ArgTy = Type;
+      TInfo = Context.getTrivialTypeSourceInfo(
+          Type, TInfo->getTypeLoc().getBeginLoc());
+    }
+  }
   bool Dependent = ArgTy->isDependentType();
   SourceRange TypeRange = TInfo->getTypeLoc().getLocalSourceRange();
 

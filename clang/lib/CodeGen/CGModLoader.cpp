@@ -28,7 +28,8 @@ void CodeGenModule::updateModLoaderDataLayout() const {
 }
 
 static void copyObject(CodeGenFunction &CGF, Address Dest, Address Src,
-                       QualType Type, SourceLocation Loc, bool IsVolatile) {
+                       QualType Type, SourceLocation Loc, bool IsVolatile,
+                       llvm::Value *ArrayCount = nullptr) {
   ASTContext &Context = CGF.getContext();
   CGBuilderTy &Builder = CGF.Builder;
   QualType Canonical = Context.getCanonicalType(Type);
@@ -51,23 +52,44 @@ static void copyObject(CodeGenFunction &CGF, Address Dest, Address Src,
     QualType ElementType = Array->getElementType();
     uint64_t Count = Array->getZExtSize();
     CharUnits ElementSize = Context.getTypeSizeInChars(ElementType);
-    if (Count <= 16) {
-      for (uint64_t Index = 0; Index < Count; ++Index)
-        CopyAtOffset(ElementSize * Index, ElementType, Loc);
+    if (Count <= 16 && !ArrayCount) {
+      for (uint64_t Index = 0; Index < Count; ++Index) {
+        auto ElementAddress = [&](Address Base) {
+          if (llvm::Value *Pointer = emitModLoaderPointerOffset(
+                  CGF, Base.emitRawPointer(CGF), ElementType,
+                  Builder.getInt64(Index)))
+            return Address(Pointer, CGF.ConvertTypeForMem(ElementType),
+                           CharUnits::One());
+          return AtOffset(Base, ElementSize * Index,
+                          CGF.ConvertTypeForMem(ElementType));
+        };
+        copyObject(CGF, ElementAddress(Dest), ElementAddress(Src), ElementType,
+                   Loc, IsVolatile);
+      }
 
       return;
     }
 
     llvm::Type *ElementLLVMType = CGF.ConvertTypeForMem(ElementType);
+    llvm::Value *Length = llvm::ConstantInt::get(CGF.SizeTy, Count);
+    if (ArrayCount) {
+      ArrayCount = Builder.CreateZExtOrTrunc(ArrayCount, CGF.SizeTy);
+      Length = Builder.CreateSelect(Builder.CreateICmpULT(ArrayCount, Length),
+                                    ArrayCount, Length);
+    }
     llvm::BasicBlock *Entry = Builder.GetInsertBlock();
     llvm::BasicBlock *Body = CGF.createBasicBlock("modloader.copy.body");
     llvm::BasicBlock *Done = CGF.createBasicBlock("modloader.copy.done");
+    Builder.CreateCondBr(Builder.CreateIsNull(Length), Done, Body);
     CGF.EmitBlock(Body);
     llvm::PHINode *Index =
         Builder.CreatePHI(CGF.SizeTy, 2, "modloader.copy.index");
     Index->addIncoming(llvm::ConstantInt::get(CGF.SizeTy, 0), Entry);
 
     auto AtIndex = [&](Address Base) {
+      if (llvm::Value *Pointer = emitModLoaderPointerOffset(
+              CGF, Base.emitRawPointer(CGF), ElementType, Index))
+        return Address(Pointer, ElementLLVMType, CharUnits::One());
       return Address(Builder.CreateInBoundsGEP(ElementLLVMType,
                                                Base.emitRawPointer(CGF), Index),
                      ElementLLVMType,
@@ -80,9 +102,7 @@ static void copyObject(CodeGenFunction &CGF, Address Dest, Address Src,
     llvm::Value *Next =
         Builder.CreateNUWAdd(Index, llvm::ConstantInt::get(CGF.SizeTy, 1));
     Index->addIncoming(Next, Builder.GetInsertBlock());
-    Builder.CreateCondBr(
-        Builder.CreateICmpEQ(Next, llvm::ConstantInt::get(CGF.SizeTy, Count)),
-        Done, Body);
+    Builder.CreateCondBr(Builder.CreateICmpEQ(Next, Length), Done, Body);
     CGF.EmitBlock(Done);
     return;
   }
@@ -125,16 +145,79 @@ static void copyObject(CodeGenFunction &CGF, Address Dest, Address Src,
         LastStorage = Info.StorageOffset;
         llvm::Type *StorageType =
             llvm::Type::getIntNTy(CGF.getLLVMContext(), Info.StorageSize);
-        Address SrcUnit = AtOffset(Src, Info.StorageOffset, StorageType);
-        Address DestUnit = AtOffset(Dest, Info.StorageOffset, StorageType);
+        auto StorageAddress = [&](Address Base) {
+          if (llvm::ModLoader::isGuestAddressSpace(Base.getAddressSpace())) {
+            if (llvm::Value *Offset = emitModLoaderFieldLayout(CGF, Field)) {
+              uint64_t Baseline =
+                  Layout.getFieldOffset(Field->getFieldIndex()) /
+                  Context.getCharWidth();
+              Offset = Builder.CreateSub(
+                  Offset, llvm::ConstantInt::get(CGF.SizeTy, Baseline));
+              Offset = Builder.CreateAdd(
+                  Offset, llvm::ConstantInt::get(
+                              CGF.SizeTy, Info.StorageOffset.getQuantity()));
+              return Address(Builder.CreateGEP(
+                                 CGF.Int8Ty, Base.emitRawPointer(CGF), Offset),
+                             StorageType, CharUnits::One());
+            }
+          }
+          return AtOffset(Base, Info.StorageOffset, StorageType);
+        };
+        Address SrcUnit = StorageAddress(Src);
+        Address DestUnit = StorageAddress(Dest);
         Builder.CreateStore(Builder.CreateLoad(SrcUnit, IsVolatile), DestUnit,
                             IsVolatile);
         continue;
       }
 
+      if (Field->getType()->isIncompleteArrayType())
+        continue;
+      llvm::BasicBlock *FieldDone = nullptr;
+      bool Dynamic = RD->hasAttr<ModLoaderRuntimeLayoutAttr>();
+      llvm::Value *FieldOffset =
+          Dynamic ? emitModLoaderFieldLayout(CGF, Field, false, false)
+                  : nullptr;
+      if (FieldOffset) {
+        llvm::BasicBlock *FieldCopy = CGF.createBasicBlock("guest.copy.field");
+        FieldDone = CGF.createBasicBlock("guest.copy.next");
+        llvm::Value *Absent = llvm::ConstantInt::getAllOnesValue(CGF.SizeTy);
+        Builder.CreateCondBr(Builder.CreateICmpEQ(FieldOffset, Absent),
+                             FieldDone, FieldCopy);
+        CGF.EmitBlock(FieldCopy);
+      }
+      llvm::Value *FieldCount = nullptr;
+      if (Dynamic) {
+        if (const auto *Array =
+                Context.getAsConstantArrayType(Field->getType())) {
+          unsigned GuestAS =
+              llvm::ModLoader::isGuestAddressSpace(Src.getAddressSpace())
+                  ? Src.getAddressSpace()
+                  : Dest.getAddressSpace();
+          QualType Element = Context.getAddrSpaceQualType(
+              Array->getElementType(), getLangASFromTargetAS(GuestAS));
+          llvm::Value *ElementSize = emitModLoaderSize(CGF, Element);
+          if (!ElementSize)
+            ElementSize = llvm::ConstantInt::get(
+                CGF.SizeTy, Context.getTypeSizeInChars(Element).getQuantity());
+          FieldCount = Builder.CreateUDiv(
+              emitModLoaderFieldLayout(CGF, Field, true, false), ElementSize);
+        }
+      }
       CharUnits Offset = Context.toCharUnitsFromBits(
           Layout.getFieldOffset(Field->getFieldIndex()));
-      CopyAtOffset(Offset, Field->getType(), Field->getLocation());
+      auto FieldAddress = [&](Address Base) {
+        if (llvm::ModLoader::isGuestAddressSpace(Base.getAddressSpace()))
+          if (FieldOffset)
+            return Address(
+                Builder.CreateGEP(CGF.Int8Ty, Base.emitRawPointer(CGF),
+                                  FieldOffset),
+                CGF.ConvertTypeForMem(Field->getType()), CharUnits::One());
+        return AtOffset(Base, Offset, CGF.ConvertTypeForMem(Field->getType()));
+      };
+      copyObject(CGF, FieldAddress(Dest), FieldAddress(Src), Field->getType(),
+                 Field->getLocation(), IsVolatile, FieldCount);
+      if (FieldDone)
+        CGF.EmitBlock(FieldDone);
     }
 
     return;
@@ -163,6 +246,14 @@ bool CodeGen::emitModLoaderAggregateCopy(CodeGenFunction &CGF, Address Dest,
                                          bool IsVolatile) {
   unsigned DestAS = Dest.getAddressSpace();
   unsigned SrcAS = Src.getAddressSpace();
+  if (DestAS == SrcAS && llvm::ModLoader::isGuestAddressSpace(DestAS)) {
+    QualType GuestType = CGF.getContext().getAddrSpaceQualType(
+        Type, getLangASFromTargetAS(DestAS));
+    if (llvm::Value *Size = emitModLoaderSize(CGF, GuestType)) {
+      CGF.Builder.CreateMemCpy(Dest, Src, Size, IsVolatile);
+      return true;
+    }
+  }
   if (DestAS == SrcAS || (!llvm::ModLoader::isGuestAddressSpace(DestAS) &&
                           !llvm::ModLoader::isGuestAddressSpace(SrcAS)))
     return false;

@@ -13,6 +13,7 @@
 
 namespace clang {
 class ASTContext;
+class Expr;
 class FieldDecl;
 class NamedDecl;
 
@@ -50,6 +51,7 @@ struct Defaults {
   bool Guest = false;
   unsigned SpaceId = FlatSpaceId;
   GuestABI ABI = GuestABI::None;
+  bool RuntimeLayout = false;
 };
 
 class SpaceTable {
@@ -90,6 +92,8 @@ private:
   std::vector<DefaultsEntry> DefaultsStack;
 };
 
+bool hasRuntimeLayout(QualType T);
+bool isRuntimeLayoutQuery(const Expr *E);
 bool isGuestAddressSpace(LangAS AS);
 unsigned getGuestSpaceId(LangAS AS);
 bool isHostOnlyType(QualType T);

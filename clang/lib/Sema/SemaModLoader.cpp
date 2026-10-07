@@ -47,6 +47,10 @@ bool modloader::checkGuestInitializer(Sema &S, VarDecl *Var) {
 }
 
 void modloader::finishRecord(Sema &S, RecordDecl *Record) {
+  if (S.Context.getModLoaderSpaces().getDefaults().RuntimeLayout &&
+      !Record->hasAttr<ModLoaderRuntimeLayoutAttr>())
+    Record->addAttr(ModLoaderRuntimeLayoutAttr::CreateImplicit(S.Context));
+
   if (inGuestABIRegion(S.Context) && !Record->hasAttr<ModLoaderGuestABIAttr>())
     Record->addAttr(ModLoaderGuestABIAttr::CreateImplicit(S.Context));
 

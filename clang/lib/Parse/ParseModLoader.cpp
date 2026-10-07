@@ -115,8 +115,9 @@ void PragmaModLoaderHandler::HandlePragma(Preprocessor &PP,
                             ? Tok.getIdentifierInfo()->getName()
                             : StringRef();
   if (Directive != "space" && Directive != "region" &&
-      Directive != "use_space") {
-    Fail(Tok.getLocation(), "expected 'space', 'region' or 'use_space'");
+      Directive != "use_space" && Directive != "runtime_layout") {
+    Fail(Tok.getLocation(),
+         "expected 'space', 'region', 'use_space' or 'runtime_layout'");
     return;
   }
 
@@ -270,6 +271,17 @@ void PragmaModLoaderHandler::HandlePragma(Preprocessor &PP,
 
     Error = Table.addRegion(
         {Flat->Id, Target->Id, Arguments[2].Value, Arguments[3].Value});
+  } else if (Directive == "runtime_layout") {
+    if (Arguments.size() != 1 || !Arguments[0].Name ||
+        (!Arguments[0].Name->isStr("on") && !Arguments[0].Name->isStr("off"))) {
+      Fail(StartLoc, "expected runtime_layout(on) or runtime_layout(off)");
+      return;
+    }
+    modloader::Defaults NewDefaults = Table.getDefaults();
+    NewDefaults.RuntimeLayout = Arguments[0].Name->isStr("on");
+    SourceManager &SM = PP.getSourceManager();
+    FileID File = SM.getFileID(SM.getExpansionLoc(StartLoc));
+    Table.useSpace(File.getHashValue(), NewDefaults);
   } else {
     if (Arguments.size() != 1 || !Arguments[0].Name || Arguments[0].IsOption) {
       Fail(StartLoc, "expected use_space(name)");
@@ -278,6 +290,7 @@ void PragmaModLoaderHandler::HandlePragma(Preprocessor &PP,
 
     const Argument &Arg = Arguments[0];
     modloader::Defaults NewDefaults;
+    NewDefaults.RuntimeLayout = Table.getDefaults().RuntimeLayout;
     if (Arg.Name->getName() != modloader::HostSpaceName) {
       const modloader::Space *Space = Table.lookup(Arg.Name->getName());
       if (!Space) {

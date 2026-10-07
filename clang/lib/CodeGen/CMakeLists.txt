@@ -87,6 +87,7 @@ add_clang_library(clangCodeGen
   CGHLSLBuiltins.cpp
   CGLoopInfo.cpp
   CGModLoader.cpp
+  CGModLoaderLayout.cpp
   CGNonTrivialStruct.cpp
   CGObjC.cpp
   CGObjCGNU.cpp

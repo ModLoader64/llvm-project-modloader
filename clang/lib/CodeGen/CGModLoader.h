@@ -11,12 +11,24 @@ class Value;
 
 namespace clang {
 class CastExpr;
+class Expr;
+class FieldDecl;
+class RecordDecl;
 class VarDecl;
 
 namespace CodeGen {
 class CodeGenFunction;
 class CodeGenModule;
 
+llvm::Value *emitModLoaderSize(CodeGenFunction &CGF, QualType Type,
+                               bool Alignment = false);
+llvm::Value *emitModLoaderFieldLayout(CodeGenFunction &CGF,
+                                      const FieldDecl *Field, bool Size = false,
+                                      bool CheckPresence = true);
+llvm::Value *emitModLoaderLayoutQuery(CodeGenFunction &CGF, const Expr *E);
+llvm::Value *emitModLoaderPointerOffset(CodeGenFunction &CGF,
+                                        llvm::Value *Pointer, QualType Element,
+                                        llvm::Value *Index);
 bool emitModLoaderAggregateCopy(CodeGenFunction &CGF, Address Dest, Address Src,
                                 QualType Type, bool IsVolatile);
 llvm::Value *emitModLoaderRangeCheckedCast(CodeGenFunction &CGF,
